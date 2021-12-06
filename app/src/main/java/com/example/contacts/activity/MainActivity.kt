@@ -2,6 +2,7 @@ package com.example.contacts.activity
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
@@ -13,6 +14,8 @@ import com.example.contacts.databinding.ActivityMainBinding
 import com.example.contacts.databinding.ContactCardBinding
 import com.example.contacts.domain.Contact
 import com.example.contacts.repo.ContactsRepoInterface
+import com.example.contacts.repo.db.ContactContract
+import com.example.contacts.repo.db.ContactDbManager
 import com.example.contacts.utils.ApplicationUtils
 
 
@@ -20,7 +23,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private val repo: ContactsRepoInterface = ApplicationUtils().getInstanceContactsRepository()!!
-    private val adapter = MainAdapter()
+    private val adapter = MainAdapter(this)
+    private val dbManager = ContactDbManager(this)
 
     private val modifyContactLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -88,15 +92,61 @@ class MainActivity : AppCompatActivity() {
         val view = binding.root
         setContentView(view)
         binding.recyclerView.adapter = adapter
-        adapter.setContactsList(repo.findAll())
+        var list = loadQueryAll()
+        adapter.setContactsList(list)
+        repo.setContacts(list)
         binding.addButton.setOnClickListener {
             val intent = Intent(this, AddActivity::class.java)
             addContactLauncher.launch(intent)
         }
     }
 
-    inner class MainAdapter : RecyclerView.Adapter<MainViewHolder>() {
+    override fun onDestroy() {
+        dbManager.close()
+        super.onDestroy()
+    }
+
+    fun loadQueryAll(): MutableList<Contact> {
+        val cursor = dbManager.queryAll()
+        var listContacts = mutableListOf<Contact>();
+        if (cursor.moveToFirst()) {
+            do {
+                val idColumnIndex = cursor.getColumnIndex(ContactContract.ContactEntry.COLUMN_ID)
+                val firstNameColumnIndex =
+                    cursor.getColumnIndex(ContactContract.ContactEntry.COLUMN_FIRST_NAME)
+                val lastNameColumnIndex =
+                    cursor.getColumnIndex(ContactContract.ContactEntry.COLUMN_LAST_NAME)
+                val emailAddressColumnIndex =
+                    cursor.getColumnIndex(ContactContract.ContactEntry.COLUMN_EMAIL_ADDRESS)
+                val addressColumnIndex =
+                    cursor.getColumnIndex(ContactContract.ContactEntry.COLUMN_ADDRESS)
+                val phoneNumberColumnIndex =
+                    cursor.getColumnIndex(ContactContract.ContactEntry.COLUMN_PHONE_NUMBER)
+                val id = cursor.getInt(idColumnIndex)
+                val firstName = cursor.getString(firstNameColumnIndex)
+                val lastName = cursor.getString(lastNameColumnIndex)
+                val emailAddress = cursor.getString(emailAddressColumnIndex)
+                val address = cursor.getString(addressColumnIndex)
+                val phoneNumber = cursor.getString(phoneNumberColumnIndex)
+                listContacts.add(
+                    Contact(
+                        id,
+                        firstName,
+                        lastName,
+                        phoneNumber,
+                        emailAddress,
+                        address
+                    )
+                )
+            } while (cursor.moveToNext())
+        }
+        return listContacts;
+    }
+
+
+    inner class MainAdapter(context: Context) : RecyclerView.Adapter<MainViewHolder>() {
         var contacts = mutableListOf<Contact>()
+        private var context: Context? = context
 
         @SuppressWarnings("NotifyDataSetChanged")
         fun setContactsList(contacts: List<Contact>) {
@@ -116,9 +166,15 @@ class MainActivity : AppCompatActivity() {
             val contact = contacts[position]
             holder.binding.cardFullName.text = contact.firstName + " " + contact.lastName
             holder.binding.cardPhoneNumber.text = contact.phoneNumber
-            holder.binding.deleteButton.setOnClickListener{
-                contacts.removeAt(position)
-                repo.removeAt(position)
+            holder.binding.deleteButton.setOnClickListener {
+                val dbManager = ContactDbManager(this.context!!)
+                val selectionArgs = arrayOf(contact.id.toString())
+                dbManager.delete(
+                    "${ContactContract.ContactEntry.COLUMN_ID}=?",
+                    selectionArgs
+                )
+                contacts.remove(contact)
+                repo.removeById(contact.id)
                 notifyDataSetChanged()
             }
             holder.binding.cardId.setOnClickListener() {

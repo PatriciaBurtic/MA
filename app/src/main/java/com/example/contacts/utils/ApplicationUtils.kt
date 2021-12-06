@@ -1,7 +1,7 @@
 package com.example.contacts.utils
 
 import com.example.contacts.repo.ContactsRepoInterface
-import com.example.contacts.repo.ContactsRepoMock
+import com.example.contacts.repo.ContactsRepoInMemory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -17,14 +17,14 @@ class ApplicationUtils {
 
     fun getInstanceContactsRepository() : ContactsRepoInterface ? {
         if(contactsRepo == null) {
-            contactsRepo = ContactsRepoMock()
+            contactsRepo = ContactsRepoInMemory()
         }
         return contactsRepo
     }
 
     @Provides
     @Singleton
-    fun provideContactRepository(repository: ContactsRepoMock) : ContactsRepoInterface {
-        return ContactsRepoMock()
+    fun provideContactRepository(repository: ContactsRepoInMemory) : ContactsRepoInterface {
+        return ContactsRepoInMemory()
     }
 }
